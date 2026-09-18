@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ulkovaloisuus</title>
+  <!-- Chart.js -kirjasto kuvaajaa varten -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #eceff1; padding: 20px; }
+    .card { background: white; padding: 20px; border-radius: 12px; max-width: 600px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .current-val { font-size: 3rem; color: #f57c00; margin: 10px 0; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Ulkona mitattu valoisuus</h2>
+    <div>Viimeisin lukema:</div>
+    <div id="currentLux" class="current-val">-- lux</div>
+    
+    <canvas id="luxChart"></canvas>
+  </div>
+
+  <script>
+  const CHANNEL_ID = '3498847';
+  
+  // 1. MÄÄRITÄ HÄLYTYSRAJA (esim. 300 lux)
+  const ALARM_LIMIT = 300; 
+
+  let chart;
+  let alarmAudio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07a.mp3');
+
+  async function loadData() {
+    try {
+      const res = await fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?results=30`);
+      const data = await res.json();
+
+      const feeds = data.feeds;
+      if (!feeds || feeds.length === 0) return;
+
+      const latestLux = Math.round(feeds[feeds.length - 1].field1);
+      document.getElementById('currentLux').innerText = `${latestLux} lux`;
+
+      // 2. TARKISTETAAN YLITTYYKÖ RAJA
+      if (latestLux >= ALARM_LIMIT) {
+        document.getElementById('currentLux').style.color = 'red'; // Muutetaan teksti punaiseksi
+        alarmAudio.play().catch(e => console.log("Klikkaa sivua salliaksesi äänet"));
+      } else {
+        document.getElementById('currentLux').style.color = '#f57c00';
+      }
+
+      const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' }));
+      const values = feeds.map(f => parseFloat(f.field1));
+
+      updateChart(labels, values);
+    } catch (err) {
+      console.error("Virhe ladattaessa dataa:", err);
+    }
+  }
+
+  function updateChart(labels, values) {
+    const ctx = document.getElementById('luxChart').getContext('2d');
+
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = values;
+      chart.update();
+    } else {
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Valoisuus (Lux)',
+            data: values,
+            borderColor: '#f57c00',
+            backgroundColor: 'rgba(245, 124, 0, 0.1)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+  }
+
+  loadData();
+  setInterval(loadData, 15000);
+</script>
+</body>
+</html>
